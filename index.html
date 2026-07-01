@@ -749,7 +749,16 @@ sendBtn.addEventListener("click", ()=>{
 
 document.getElementById("confirmSend").addEventListener("click", ()=>{ closeModals(); doSend(); });
 
-function doSend(){
+/* ============================================================
+   GAS（Googleスプレッドシート）送信先URL
+   デプロイ後の「ウェブアプリのURL」をここに貼る
+   例: https://script.google.com/macros/s/××××/exec
+   ============================================================ */
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzGQhtJbfGimaZCylNWVYxyYLuZOT9u6h2eicz1ABE-HXhM6ywRj4uNd0XarifQtQLNGw/exec";
+
+const WEEK_JP = ["日","月","火","水","木","金","土"];
+
+async function doSend(){
   // 履歴に蓄積
   rows.forEach(r=>{
     if(!(r.name||"").trim()) return;
@@ -761,18 +770,61 @@ function doSend(){
     pushHistory("work3", r.w3);
   });
   saveStore();
-  /* ▼▼▼ 後段でここを GAS の fetch 送信に差し替え ▼▼▼
-     const payload = {
-       operator: store.operator,   // 入力者（この端末の使用者）
-       date,
-       rows: rows.map(...)         // 各行に 作業した職人名・人工・残業など
-     };
-     fetch(GAS_URL, {method:"POST", body:JSON.stringify(payload)});
-     ▲▲▲ */
-  toast("送信しました（確認用：端末に保存）");
-  // リセット（日付は維持）
-  rows = [newRow()];
-  renderRows();
+
+  const date = document.getElementById("workDate").value;
+  const d = new Date(date + "T00:00:00");
+  const week = isNaN(d) ? "" : WEEK_JP[d.getDay()];
+
+  // スプレッドシートへ送るデータ（1行=1タスクカード）
+  const payload = {
+    operator: store.operator || "",
+    date: date,
+    week: week,
+    rows: rows.map(r=>({
+      kindLabel: r.kind === "casual" ? "外注" : "社員",
+      name:    r.name || "",
+      client:  r.client || "",
+      site:    r.site || "",
+      w1:      r.w1 || "",
+      w2:      r.w2 || "",
+      w3:      r.w3 || "",
+      ninku:   Number(r.ninku) || 0,
+      ot:      Number(r.ot) || 0,
+      comment: r.comment || ""
+    }))
+  };
+
+  // URL未設定なら端末保存のみ（動作確認モード）
+  if(!GAS_URL || GAS_URL.indexOf("script.google.com") === -1){
+    toast("送信しました（確認用：端末に保存）");
+    rows = [newRow()];
+    renderRows();
+    return;
+  }
+
+  // 送信中はボタンを無効化
+  const btn = document.getElementById("sendBtn");
+  const orgText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "送信中…";
+
+  try{
+    await fetch(GAS_URL, {
+      method: "POST",
+      mode: "no-cors",                       // GASのCORS制約を回避
+      headers: {"Content-Type": "text/plain;charset=utf-8"},
+      body: JSON.stringify(payload)
+    });
+    // no-cors ではレスポンス内容を読めないため、成功扱いとする
+    toast("送信しました");
+    rows = [newRow()];
+    renderRows();
+  }catch(err){
+    toast("送信に失敗しました。通信環境を確認して再送してください");
+  }finally{
+    btn.disabled = false;
+    btn.textContent = orgText;
+  }
 }
 
 /* ============================================================
