@@ -217,8 +217,12 @@
   .hist-day-head{font-size:13px;font-weight:700;color:var(--navy);padding:6px 2px;border-bottom:2px solid var(--navy);margin-bottom:8px}
   .hist-site{margin-bottom:20px}
   .hist-site-head{font-size:14px;font-weight:700;color:#fff;background:var(--navy);border-radius:9px;padding:8px 12px;margin-bottom:10px}
-  .hist-person{margin:0 0 12px 4px}
+  .hist-genba{margin:0 0 14px 2px}
+  .hist-genba-head{font-size:14px;font-weight:700;color:var(--navy);background:var(--navy-soft);border-radius:8px;padding:7px 10px;margin-bottom:8px}
+  .hist-person{margin:0 0 12px 6px}
   .hist-person-head{font-size:13px;font-weight:700;color:var(--navy);padding:4px 2px;border-bottom:2px solid var(--navy);margin-bottom:8px}
+  .hist-work{margin:0 0 10px 6px}
+  .hist-work-head{font-size:13px;font-weight:600;color:var(--ink);padding:2px 0 2px 8px;border-left:3px solid var(--accent);margin-bottom:6px}
   .hist-card-date{font-weight:600;font-size:14px}
   .hist-card{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#fff}
   .hist-card-top{display:flex;align-items:center;gap:8px;font-size:15px}
@@ -934,37 +938,50 @@ function renderHistory(items){
     return;
   }
 
-  // 現場毎 → 人毎 → 日毎 にグループ化（新しい順で届く）
-  const sites = [];
+  // 人工数（h）→ 人 に換算（7h＝1人、小数第2位を四捨五入して第1位まで表示）
+  const toNin = h => (Math.round((Number(h)||0)/7*10)/10).toFixed(1);
+
+  // 取引先名 → 現場名 → 職人名 → 作業内容① → 日付 にグループ化（新しい順で届く）
+  const clients = [];
   items.forEach(it=>{
-    const siteKey = `${it.client}｜${it.site}`;
-    let s = sites.find(x=>x.key===siteKey);
-    if(!s){ s = {key:siteKey, persons:[]}; sites.push(s); }
+    let c = clients.find(x=>x.key===it.client);
+    if(!c){ c = {key:it.client, sites:[]}; clients.push(c); }
+    let s = c.sites.find(x=>x.key===it.site);
+    if(!s){ s = {key:it.site, persons:[]}; c.sites.push(s); }
     let p = s.persons.find(x=>x.key===it.name);
-    if(!p){ p = {key:it.name, list:[]}; s.persons.push(p); }
-    p.list.push(it);
+    if(!p){ p = {key:it.name, works:[]}; s.persons.push(p); }
+    let w = p.works.find(x=>x.key===it.w1);
+    if(!w){ w = {key:it.w1, list:[]}; p.works.push(w); }
+    w.list.push(it);
   });
 
   body.innerHTML =
     `<div class="hist-note">直近 ${items.length} 件を表示しています（新しい順）</div>`
-    + sites.map(s=>`
+    + clients.map(c=>`
     <div class="hist-site">
-      <div class="hist-site-head">${esc(s.key)}</div>
-      ${s.persons.map(p=>`
-      <div class="hist-person">
-        <div class="hist-person-head">${esc(p.key)}</div>
-        ${p.list.map(it=>`
-          <div class="hist-card">
-            <div class="hist-card-top">
-              <span class="hist-card-date">${esc(it.date)}${it.week?`（${esc(it.week)}）`:""}</span>
-              <span class="h-tag">${esc(it.kind)}</span>
-              <span class="h-val">${esc(String(it.ninku))}h${Number(it.ot)>0?` ／ 残業${esc(String(it.ot))}h`:""}</span>
-            </div>
-            <div class="hist-card-work">① ${esc(it.w1)}</div>
-            ${(Number(it.garage)>0||Number(it.toll)>0)?`<div class="hist-card-comment">経費：${Number(it.garage)>0?`ガレージ代 ${Number(it.garage).toLocaleString()}円`:""}${Number(it.garage)>0&&Number(it.toll)>0?" ／ ":""}${Number(it.toll)>0?`有料道路 ${Number(it.toll).toLocaleString()}円`:""}</div>`:""}
-            ${it.comment?`<div class="hist-card-comment">コメント：${esc(it.comment)}</div>`:""}
-            <div class="hist-card-sent">送信：${esc(it.sent)}</div>
+      <div class="hist-site-head">${esc(c.key)}</div>
+      ${c.sites.map(s=>`
+      <div class="hist-genba">
+        <div class="hist-genba-head">${esc(s.key)}</div>
+        ${s.persons.map(p=>`
+        <div class="hist-person">
+          <div class="hist-person-head">${esc(p.key)}</div>
+          ${p.works.map(w=>`
+          <div class="hist-work">
+            <div class="hist-work-head">① ${esc(w.key)}</div>
+            ${w.list.map(it=>`
+              <div class="hist-card">
+                <div class="hist-card-top">
+                  <span class="hist-card-date">${esc(it.date)}${it.week?`（${esc(it.week)}）`:""}</span>
+                  <span class="h-tag">${esc(it.kind)}</span>
+                  <span class="h-val">${toNin(it.ninku)}人${Number(it.ot)>0?` ／ 残業${esc(String(it.ot))}h`:""}</span>
+                </div>
+                ${(Number(it.garage)>0||Number(it.toll)>0)?`<div class="hist-card-comment">経費：${Number(it.garage)>0?`ガレージ代 ${Number(it.garage).toLocaleString()}円`:""}${Number(it.garage)>0&&Number(it.toll)>0?" ／ ":""}${Number(it.toll)>0?`有料道路 ${Number(it.toll).toLocaleString()}円`:""}</div>`:""}
+                ${it.comment?`<div class="hist-card-comment">コメント：${esc(it.comment)}</div>`:""}
+                <div class="hist-card-sent">送信：${esc(it.sent)}</div>
+              </div>`).join("")}
           </div>`).join("")}
+        </div>`).join("")}
       </div>`).join("")}
     </div>`).join("");
 }
