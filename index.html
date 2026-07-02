@@ -147,6 +147,15 @@
   .ot-badge{background:var(--accent)}
   .ot-field .stepper input{font-weight:600}
   .ot-field .stepper button{color:var(--accent-deep)}
+  /* 経費（ガレージ代・有料道路料金） */
+  .exp-field{padding:10px;border-radius:10px;border:1.5px solid #d9e6d9;background:#f0f7f0}
+  .exp-field label{display:flex;align-items:center;gap:6px}
+  .exp-badge{background:var(--ok)}
+  .exp-field input{
+    width:100%;font-size:16px;padding:11px 12px;background:#fff;border:1px solid var(--line);
+    border-radius:9px;font-variant-numeric:tabular-nums;
+  }
+  .exp-field input:focus{outline:2px solid var(--ok);outline-offset:-1px;border-color:var(--ok)}
   /* 作業内容 自動伸長textarea */
   textarea.ac-multi{
     width:100%;font-family:inherit;font-size:16px;line-height:1.6;color:var(--ink);
@@ -206,6 +215,11 @@
   /* 送信履歴モーダル */
   .hist-day{margin-bottom:16px}
   .hist-day-head{font-size:13px;font-weight:700;color:var(--navy);padding:6px 2px;border-bottom:2px solid var(--navy);margin-bottom:8px}
+  .hist-site{margin-bottom:20px}
+  .hist-site-head{font-size:14px;font-weight:700;color:#fff;background:var(--navy);border-radius:9px;padding:8px 12px;margin-bottom:10px}
+  .hist-person{margin:0 0 12px 4px}
+  .hist-person-head{font-size:13px;font-weight:700;color:var(--navy);padding:4px 2px;border-bottom:2px solid var(--navy);margin-bottom:8px}
+  .hist-card-date{font-weight:600;font-size:14px}
   .hist-card{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#fff}
   .hist-card-top{display:flex;align-items:center;gap:8px;font-size:15px}
   .hist-card-top .h-who{font-weight:600}
@@ -423,8 +437,8 @@ const HISTORY_LABELS = {
 };
 
 function newRow(copyFrom){
-  const base = {id:rid++, kind:"staff", name:"", client:"", site:"", w1:"", w2:"", w3:"", comment:"", ninku:0, ot:0};
-  if(copyFrom){ // 労働時間・コメント以外（区分・職人名・取引先・現場・作業内容3階層）を引き継ぐ
+  const base = {id:rid++, kind:"staff", name:"", client:"", site:"", w1:"", w2:"", w3:"", comment:"", ninku:0, ot:0, garage:0, toll:0};
+  if(copyFrom){ // 労働時間・コメント・経費以外（区分・職人名・取引先・現場・作業内容3階層）を引き継ぐ
     base.kind = copyFrom.kind;
     base.name = copyFrom.name;
     base.client = copyFrom.client;
@@ -448,7 +462,7 @@ function addWorkRow(){
   const last = rows[rows.length-1];
   const r = newRow(last);
   r.w1 = ""; r.w2 = ""; r.w3 = ""; r.comment = "";
-  r.ninku = 0; r.ot = 0;
+  r.ninku = 0; r.ot = 0; r.garage = 0; r.toll = 0;
   r.workOnly = true;   // 職人名・取引先・現場の入力欄を非表示にする
   rows.push(r);
   renderRows();
@@ -532,6 +546,16 @@ function renderRows(){
           </div>
         </div>
       </div>
+      <div class="row grid2 exp-row">
+        <div class="exp-field">
+          <label><span class="time-badge exp-badge">経費</span>ガレージ代（円）</label>
+          <input type="number" inputmode="numeric" min="0" step="10" placeholder="0" data-exp="garage" data-rid="${r.id}" value="${Number(r.garage)>0?r.garage:""}">
+        </div>
+        <div class="exp-field">
+          <label><span class="time-badge exp-badge">経費</span>有料道路料金（円）</label>
+          <input type="number" inputmode="numeric" min="0" step="10" placeholder="0" data-exp="toll" data-rid="${r.id}" value="${Number(r.toll)>0?r.toll:""}">
+        </div>
+      </div>
     `;
     rowsEl.appendChild(card);
 
@@ -598,6 +622,16 @@ function renderRows(){
       input.addEventListener("input", ()=>{
         let v = parseFloat(input.value||"0"); if(isNaN(v)||v<0) v=0;
         r[field]=v; updateSummary();
+      });
+    });
+
+    // 経費（ガレージ代・有料道路料金）
+    card.querySelectorAll("[data-exp]").forEach(inp=>{
+      const field = inp.getAttribute("data-exp");
+      inp.addEventListener("input", ()=>{
+        let v = parseInt(inp.value, 10);
+        if(isNaN(v) || v < 0) v = 0;
+        r[field] = v;
       });
     });
 
@@ -820,6 +854,8 @@ async function doSend(){
       w3:      r.w3 || "",
       ninku:   Number(r.ninku) || 0,
       ot:      Number(r.ot) || 0,
+      garage:  Number(r.garage) || 0,
+      toll:    Number(r.toll) || 0,
       comment: r.comment || ""
     }))
   };
@@ -898,32 +934,38 @@ function renderHistory(items){
     return;
   }
 
-  // 作業日ごとにグループ化（新しい順で届く）
-  const groups = [];
+  // 現場毎 → 人毎 → 日毎 にグループ化（新しい順で届く）
+  const sites = [];
   items.forEach(it=>{
-    const key = it.date + (it.week ? `（${it.week}）` : "");
-    let g = groups.find(x=>x.key===key);
-    if(!g){ g = {key, list:[]}; groups.push(g); }
-    g.list.push(it);
+    const siteKey = `${it.client}｜${it.site}`;
+    let s = sites.find(x=>x.key===siteKey);
+    if(!s){ s = {key:siteKey, persons:[]}; sites.push(s); }
+    let p = s.persons.find(x=>x.key===it.name);
+    if(!p){ p = {key:it.name, list:[]}; s.persons.push(p); }
+    p.list.push(it);
   });
 
   body.innerHTML =
     `<div class="hist-note">直近 ${items.length} 件を表示しています（新しい順）</div>`
-    + groups.map(g=>`
-    <div class="hist-day">
-      <div class="hist-day-head">${esc(g.key)}</div>
-      ${g.list.map(it=>`
-        <div class="hist-card">
-          <div class="hist-card-top">
-            <span class="h-who">${esc(it.name)}</span>
-            <span class="h-tag">${esc(it.kind)}</span>
-            <span class="h-val">${esc(String(it.ninku))}h${Number(it.ot)>0?` ／ 残業${esc(String(it.ot))}h`:""}</span>
-          </div>
-          <div class="hist-card-site">${esc(it.client)}｜${esc(it.site)}</div>
-          <div class="hist-card-work">① ${esc(it.w1)}<br>② ${esc(it.w2)}<br>③ ${esc(it.w3)}</div>
-          ${it.comment?`<div class="hist-card-comment">コメント：${esc(it.comment)}</div>`:""}
-          <div class="hist-card-sent">送信：${esc(it.sent)}</div>
-        </div>`).join("")}
+    + sites.map(s=>`
+    <div class="hist-site">
+      <div class="hist-site-head">${esc(s.key)}</div>
+      ${s.persons.map(p=>`
+      <div class="hist-person">
+        <div class="hist-person-head">${esc(p.key)}</div>
+        ${p.list.map(it=>`
+          <div class="hist-card">
+            <div class="hist-card-top">
+              <span class="hist-card-date">${esc(it.date)}${it.week?`（${esc(it.week)}）`:""}</span>
+              <span class="h-tag">${esc(it.kind)}</span>
+              <span class="h-val">${esc(String(it.ninku))}h${Number(it.ot)>0?` ／ 残業${esc(String(it.ot))}h`:""}</span>
+            </div>
+            <div class="hist-card-work">① ${esc(it.w1)}</div>
+            ${(Number(it.garage)>0||Number(it.toll)>0)?`<div class="hist-card-comment">経費：${Number(it.garage)>0?`ガレージ代 ${Number(it.garage).toLocaleString()}円`:""}${Number(it.garage)>0&&Number(it.toll)>0?" ／ ":""}${Number(it.toll)>0?`有料道路 ${Number(it.toll).toLocaleString()}円`:""}</div>`:""}
+            ${it.comment?`<div class="hist-card-comment">コメント：${esc(it.comment)}</div>`:""}
+            <div class="hist-card-sent">送信：${esc(it.sent)}</div>
+          </div>`).join("")}
+      </div>`).join("")}
     </div>`).join("");
 }
 
