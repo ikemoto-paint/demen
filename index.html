@@ -197,6 +197,25 @@
   }
   .send-btn:active{background:var(--accent-deep)}
   .send-btn:disabled{opacity:.5}
+  .hist-btn{
+    background:#fff;border:1.5px solid var(--navy);color:var(--navy);border-radius:var(--radius);
+    padding:14px 18px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;white-space:nowrap;
+  }
+  .hist-btn:active{background:var(--navy-soft)}
+
+  /* 送信履歴モーダル */
+  .hist-day{margin-bottom:16px}
+  .hist-day-head{font-size:13px;font-weight:700;color:var(--navy);padding:6px 2px;border-bottom:2px solid var(--navy);margin-bottom:8px}
+  .hist-card{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#fff}
+  .hist-card-top{display:flex;align-items:center;gap:8px;font-size:15px}
+  .hist-card-top .h-who{font-weight:600}
+  .hist-card-top .h-tag{font-size:11px;color:var(--sub)}
+  .hist-card-top .h-val{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:600;color:var(--navy);white-space:nowrap}
+  .hist-card-site{font-size:13px;color:var(--ink);margin-top:5px}
+  .hist-card-work{font-size:13px;color:var(--sub);margin-top:3px;line-height:1.7}
+  .hist-card-comment{font-size:13px;color:var(--sub);margin-top:3px}
+  .hist-card-sent{font-size:11px;color:var(--sub);margin-top:6px;text-align:right}
+  .hist-note{font-size:12px;color:var(--sub);margin-bottom:10px}
 
   /* modal */
   .modal-bg{position:fixed;inset:0;background:rgba(20,26,40,.5);z-index:60;display:none;align-items:flex-end;justify-content:center}
@@ -278,6 +297,7 @@
 
 <div class="footer-bar">
   <div class="inner">
+    <button class="hist-btn" id="openHistory">履歴</button>
     <button class="send-btn" id="sendBtn">日報を送信</button>
   </div>
 </div>
@@ -318,6 +338,14 @@
       <h3>履歴の編集・削除</h3>
       <div id="histArea"></div>
     </div>
+  </div>
+</div>
+
+<!-- 送信履歴モーダル -->
+<div class="modal-bg" id="historyModal">
+  <div class="modal">
+    <h2>送信履歴：<span id="historyWho"></span><button class="close" data-close>×</button></h2>
+    <div id="historyBody"></div>
   </div>
 </div>
 
@@ -827,6 +855,76 @@ async function doSend(){
     btn.disabled = false;
     btn.textContent = orgText;
   }
+}
+
+/* ============================================================
+   送信履歴（スプレッドシートから自分の入力分を取得して表示）
+   ============================================================ */
+const HISTORY_LIMIT = 30; // 表示する最大件数
+
+document.getElementById("openHistory").addEventListener("click", ()=>{
+  const op = (store.operator||"").trim();
+  if(!op){
+    toast("設定画面で入力者名を登録してください");
+    renderSettings(); openModal("settingsModal");
+    return;
+  }
+  document.getElementById("historyWho").textContent = op;
+  document.getElementById("historyBody").innerHTML = `<div class="empty">読み込み中…</div>`;
+  openModal("historyModal");
+  loadHistory(op);
+});
+
+async function loadHistory(op){
+  const body = document.getElementById("historyBody");
+  try{
+    const url = GAS_URL
+      + "?mode=history"
+      + "&name=" + encodeURIComponent(op)
+      + "&limit=" + HISTORY_LIMIT;
+    const res = await fetch(url);          // GETはレスポンスを読める
+    const json = await res.json();
+    if(json.status !== "ok") throw new Error(json.message || "server error");
+    renderHistory(json.items || []);
+  }catch(err){
+    body.innerHTML = `<div class="warn-box">履歴を取得できませんでした。通信環境を確認して、もう一度お試しください。</div>`;
+  }
+}
+
+function renderHistory(items){
+  const body = document.getElementById("historyBody");
+  if(items.length === 0){
+    body.innerHTML = `<div class="empty">送信履歴はまだありません。</div>`;
+    return;
+  }
+
+  // 作業日ごとにグループ化（新しい順で届く）
+  const groups = [];
+  items.forEach(it=>{
+    const key = it.date + (it.week ? `（${it.week}）` : "");
+    let g = groups.find(x=>x.key===key);
+    if(!g){ g = {key, list:[]}; groups.push(g); }
+    g.list.push(it);
+  });
+
+  body.innerHTML =
+    `<div class="hist-note">直近 ${items.length} 件を表示しています（新しい順）</div>`
+    + groups.map(g=>`
+    <div class="hist-day">
+      <div class="hist-day-head">${esc(g.key)}</div>
+      ${g.list.map(it=>`
+        <div class="hist-card">
+          <div class="hist-card-top">
+            <span class="h-who">${esc(it.name)}</span>
+            <span class="h-tag">${esc(it.kind)}</span>
+            <span class="h-val">${esc(String(it.ninku))}h${Number(it.ot)>0?` ／ 残業${esc(String(it.ot))}h`:""}</span>
+          </div>
+          <div class="hist-card-site">${esc(it.client)}｜${esc(it.site)}</div>
+          <div class="hist-card-work">① ${esc(it.w1)}<br>② ${esc(it.w2)}<br>③ ${esc(it.w3)}</div>
+          ${it.comment?`<div class="hist-card-comment">コメント：${esc(it.comment)}</div>`:""}
+          <div class="hist-card-sent">送信：${esc(it.sent)}</div>
+        </div>`).join("")}
+    </div>`).join("");
 }
 
 /* ============================================================
