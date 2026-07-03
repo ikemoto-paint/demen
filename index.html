@@ -273,6 +273,49 @@
   .hist-item input{font-size:14px;padding:8px 10px}
   .hist-item button{background:none;border:0;color:var(--danger);font-size:12px;cursor:pointer;padding:6px}
   .empty{color:var(--sub);font-size:13px;padding:8px 4px}
+
+  /* 進捗（歩掛り）グラフ */
+  .prog-item{margin-bottom:16px}
+  .prog-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:5px}
+  .prog-site{font-size:14px;font-weight:700;color:var(--ink)}
+  .prog-pct{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--navy);white-space:nowrap}
+  .prog-pct.warn{color:var(--accent-deep)}
+  .prog-pct.over{color:var(--danger)}
+  .prog-track{position:relative;height:22px;background:var(--navy-soft);border-radius:11px;overflow:hidden}
+  .prog-bar{position:absolute;left:0;top:0;bottom:0;background:var(--navy);border-radius:11px;min-width:2px}
+  .prog-bar.warn{background:var(--accent)}
+  .prog-bar.over{background:var(--danger)}
+  .prog-goal{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);opacity:.45}
+  .prog-nums{display:flex;justify-content:space-between;font-size:12px;color:var(--sub);margin-top:4px;font-variant-numeric:tabular-nums}
+  .prog-nostd{font-size:12px;color:var(--warn-ink);background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:8px;padding:6px 9px;margin-top:4px}
+  .prog-legend{font-size:12px;color:var(--sub);margin:0 0 14px}
+
+  /* 管理画面 */
+  .admin-btn{
+    width:100%;border:1.5px solid var(--navy);color:var(--navy);background:#fff;
+    border-radius:10px;padding:13px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;
+  }
+  .admin-btn:active{background:var(--navy-soft)}
+  .std-row{display:grid;grid-template-columns:1fr 92px 44px;gap:8px;align-items:center;margin-bottom:8px}
+  .std-row input{font-size:14px;padding:9px 10px}
+  .std-row input[type=number]{text-align:right;font-variant-numeric:tabular-nums}
+  .std-row button{background:none;border:0;color:var(--danger);font-size:13px;cursor:pointer;padding:6px 0}
+  .std-head{display:grid;grid-template-columns:1fr 92px 44px;gap:8px;font-size:11px;color:var(--sub);margin-bottom:4px}
+  .admin-save{
+    width:100%;background:var(--navy);color:#fff;border:0;border-radius:10px;padding:13px;
+    font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:6px;
+  }
+  .admin-save:active{background:var(--navy-deep)}
+  .admin-save:disabled{opacity:.5}
+  .adm-form .row{margin-bottom:10px}
+  .adm-form label{font-size:12px;color:var(--sub);display:block;margin-bottom:4px}
+  .adm-send{
+    width:100%;background:var(--accent);color:#fff;border:0;border-radius:10px;padding:13px;
+    font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:4px;
+  }
+  .adm-send:active{background:var(--accent-deep)}
+  .adm-send:disabled{opacity:.5}
+  .pin-input{font-size:22px;text-align:center;letter-spacing:.3em;font-variant-numeric:tabular-nums}
   .toast{
     position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:var(--ink);color:#fff;
     padding:12px 18px;border-radius:24px;font-size:14px;z-index:80;opacity:0;transition:opacity .25s;pointer-events:none;
@@ -316,6 +359,7 @@
 <div class="footer-bar">
   <div class="inner">
     <button class="hist-btn" id="openHistory">履歴</button>
+    <button class="hist-btn" id="openProgress">進捗</button>
     <button class="send-btn" id="sendBtn">日報を送信</button>
   </div>
 </div>
@@ -355,6 +399,69 @@
     <div class="set-section">
       <h3>履歴の編集・削除</h3>
       <div id="histArea"></div>
+    </div>
+
+    <div class="set-section">
+      <h3>管理者メニュー</h3>
+      <div style="font-size:12px;color:var(--sub);margin-bottom:8px">現場ごとの標準人工数（歩掛り）の設定と、集計対象外の外注入力ができます。暗証番号が必要です。</div>
+      <button class="admin-btn" id="openAdmin">管理画面を開く</button>
+    </div>
+  </div>
+</div>
+
+<!-- 暗証番号モーダル -->
+<div class="modal-bg" id="pinModal">
+  <div class="modal center">
+    <h2>暗証番号を入力<button class="close" data-close>×</button></h2>
+    <input type="password" inputmode="numeric" class="pin-input" id="pinInput" placeholder="••••" maxlength="8">
+    <div class="modal-actions">
+      <button class="btn-ghost" data-close>やめる</button>
+      <button class="btn-primary" id="pinOk">開く</button>
+    </div>
+  </div>
+</div>
+
+<!-- 進捗モーダル -->
+<div class="modal-bg" id="progressModal">
+  <div class="modal">
+    <h2>現場別 進捗（人工数 ÷ 標準値）<button class="close" data-close>×</button></h2>
+    <div id="progressBody"></div>
+  </div>
+</div>
+
+<!-- 管理画面モーダル -->
+<div class="modal-bg" id="adminModal">
+  <div class="modal">
+    <h2>管理画面<button class="close" data-close>×</button></h2>
+
+    <div class="set-section">
+      <h3>標準人工数（歩掛り）の設定</h3>
+      <div style="font-size:12px;color:var(--sub);margin-bottom:8px">現場ごとの標準人工数（人工単位）を設定します。進捗グラフの100%基準になります。</div>
+      <div class="std-head"><span>現場名</span><span>標準人工数</span><span></span></div>
+      <div id="stdList"><div class="empty">読み込み中…</div></div>
+      <div class="add-line">
+        <input type="text" id="newStdSite" placeholder="現場名を追加">
+        <button id="addStd">追加</button>
+      </div>
+      <button class="admin-save" id="saveStd">標準値を保存</button>
+    </div>
+
+    <div class="set-section adm-form">
+      <h3>集計対象外の外注入力</h3>
+      <div style="font-size:12px;color:var(--sub);margin-bottom:8px">ここから送信した外注の人工数は、進捗グラフの合計に<b>含まれません</b>。</div>
+      <div class="row"><label>作業日</label><input type="date" id="admDate"></div>
+      <div class="row"><label>外注職人名</label><input type="text" id="admName" placeholder="例）山田 太郎"></div>
+      <div class="row grid2">
+        <div><label>取引先名</label><input type="text" id="admClient"></div>
+        <div><label>現場名</label><input type="text" id="admSite"></div>
+      </div>
+      <div class="row"><label>作業内容</label><input type="text" id="admWork" placeholder="任意"></div>
+      <div class="row grid2">
+        <div><label>人工数（時間）</label><input type="number" inputmode="decimal" step="0.5" min="0" id="admNinku" placeholder="7"></div>
+        <div><label>残業時間</label><input type="number" inputmode="decimal" step="0.5" min="0" id="admOt" placeholder="0"></div>
+      </div>
+      <div class="row"><label>コメント</label><input type="text" id="admComment" placeholder="任意"></div>
+      <button class="adm-send" id="admSend">対象外として送信</button>
     </div>
   </div>
 </div>
@@ -823,6 +930,8 @@ document.getElementById("confirmSend").addEventListener("click", ()=>{ closeModa
    例: https://script.google.com/macros/s/××××/exec
    ============================================================ */
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzGQhtJbfGimaZCylNWVYxyYLuZOT9u6h2eicz1ABE-HXhM6ywRj4uNd0XarifQtQLNGw/exec";
+const ADMIN_PIN = "1234";   // ★管理者暗証番号。GAS側の ADMIN_PIN と同じ値に変更してください
+const HOURS_PER_NINKU = 7;  // 7時間 ＝ 1人工
 
 const WEEK_JP = ["日","月","火","水","木","金","土"];
 
@@ -985,6 +1094,209 @@ function renderHistory(items){
       </div>`).join("")}
     </div>`).join("");
 }
+
+/* ============================================================
+   進捗（現場別 人工数合計 ÷ 標準値）
+   ============================================================ */
+document.getElementById("openProgress").addEventListener("click", ()=>{
+  document.getElementById("progressBody").innerHTML = `<div class="empty">読み込み中…</div>`;
+  openModal("progressModal");
+  loadProgress();
+});
+
+async function loadProgress(){
+  const body = document.getElementById("progressBody");
+  try{
+    const res = await fetch(GAS_URL + "?mode=progress&t=" + Date.now());
+    const json = await res.json();
+    if(json.status !== "ok") throw new Error(json.message || "server error");
+    renderProgress(json.items || []);
+  }catch(err){
+    body.innerHTML = `<div class="warn-box">進捗を取得できませんでした。通信環境を確認して、もう一度お試しください。</div>`;
+  }
+}
+
+function renderProgress(items){
+  const body = document.getElementById("progressBody");
+  if(items.length === 0){
+    body.innerHTML = `<div class="empty">データがありません。管理画面で標準値を設定するか、日報を送信してください。</div>`;
+    return;
+  }
+  // 標準値あり（比率の高い順）→ 標準値なし の順に表示
+  const withStd = items.filter(it=>Number(it.std)>0)
+    .sort((a,b)=> (b.ninku/b.std) - (a.ninku/a.std));
+  const noStd = items.filter(it=>!(Number(it.std)>0) && Number(it.ninku)>0);
+
+  const bar = it=>{
+    const pct = it.std>0 ? it.ninku/it.std*100 : 0;
+    const cls = pct>100 ? "over" : (pct>=80 ? "warn" : "");
+    const w = Math.min(pct, 120)/120*100;        // バーは120%を上限に描画
+    const goal = 100/120*100;                    // 100%基準線の位置
+    return `
+    <div class="prog-item">
+      <div class="prog-head">
+        <span class="prog-site">${esc(it.site)}</span>
+        <span class="prog-pct ${cls}">${pct.toFixed(1)}%</span>
+      </div>
+      <div class="prog-track">
+        <div class="prog-bar ${cls}" style="width:${w}%"></div>
+        <div class="prog-goal" style="left:${goal}%"></div>
+      </div>
+      <div class="prog-nums"><span>実績 ${it.ninku} 人工</span><span>標準 ${it.std} 人工</span></div>
+    </div>`;
+  };
+
+  body.innerHTML =
+    `<div class="prog-legend">縦線が標準値（100%）です。80%以上でオレンジ、100%超えで赤になります。集計対象外の外注は含みません。</div>`
+    + withStd.map(bar).join("")
+    + (noStd.length ? noStd.map(it=>`
+      <div class="prog-item">
+        <div class="prog-head"><span class="prog-site">${esc(it.site)}</span></div>
+        <div class="prog-nostd">標準値が未設定です（実績 ${it.ninku} 人工）。管理画面で標準値を設定すると比率が表示されます。</div>
+      </div>`).join("") : "");
+}
+
+/* ============================================================
+   管理画面（暗証番号 → 標準値設定・対象外外注入力）
+   ============================================================ */
+document.getElementById("openAdmin").addEventListener("click", ()=>{
+  document.getElementById("pinInput").value = "";
+  openModal("pinModal");
+  setTimeout(()=>document.getElementById("pinInput").focus(), 100);
+});
+
+document.getElementById("pinOk").addEventListener("click", ()=>{
+  if(document.getElementById("pinInput").value !== ADMIN_PIN){
+    toast("暗証番号が違います");
+    return;
+  }
+  closeModals();
+  openModal("adminModal");
+  const d = document.getElementById("admDate");
+  if(!d.value) d.value = new Date().toISOString().slice(0,10);
+  loadStandards();
+});
+
+/* --- 標準値の編集 --- */
+let stdItems = [];   // [{site, std}]
+
+async function loadStandards(){
+  const list = document.getElementById("stdList");
+  list.innerHTML = `<div class="empty">読み込み中…</div>`;
+  try{
+    const res = await fetch(GAS_URL + "?mode=standards&t=" + Date.now());
+    const json = await res.json();
+    if(json.status !== "ok") throw new Error(json.message || "server error");
+    stdItems = json.items || [];
+    renderStandards();
+  }catch(err){
+    list.innerHTML = `<div class="warn-box">標準値を取得できませんでした。通信環境を確認してください。</div>`;
+  }
+}
+
+function renderStandards(){
+  const list = document.getElementById("stdList");
+  if(stdItems.length === 0){
+    list.innerHTML = `<div class="empty">現場が登録されていません。下の欄から追加してください。</div>`;
+    return;
+  }
+  list.innerHTML = stdItems.map((it,i)=>`
+    <div class="std-row">
+      <input type="text" value="${esc(it.site)}" data-std-site="${i}">
+      <input type="number" inputmode="decimal" step="0.5" min="0" value="${it.std||""}" placeholder="0" data-std-val="${i}">
+      <button data-std-del="${i}">削除</button>
+    </div>`).join("");
+  list.querySelectorAll("[data-std-site]").forEach(inp=>{
+    inp.addEventListener("change", ()=>{ stdItems[+inp.getAttribute("data-std-site")].site = inp.value.trim(); });
+  });
+  list.querySelectorAll("[data-std-val]").forEach(inp=>{
+    inp.addEventListener("change", ()=>{ stdItems[+inp.getAttribute("data-std-val")].std = parseFloat(inp.value)||0; });
+  });
+  list.querySelectorAll("[data-std-del]").forEach(b=>{
+    b.addEventListener("click", ()=>{ stdItems.splice(+b.getAttribute("data-std-del"),1); renderStandards(); });
+  });
+}
+
+document.getElementById("addStd").addEventListener("click", ()=>{
+  const inp = document.getElementById("newStdSite");
+  const v = inp.value.trim(); if(!v) return;
+  if(stdItems.some(it=>it.site===v)){ toast("同じ現場名がすでにあります"); return; }
+  stdItems.push({site:v, std:0});
+  inp.value = "";
+  renderStandards();
+});
+
+document.getElementById("saveStd").addEventListener("click", async ()=>{
+  const btn = document.getElementById("saveStd");
+  btn.disabled = true; btn.textContent = "保存中…";
+  try{
+    await fetch(GAS_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {"Content-Type": "text/plain;charset=utf-8"},
+      body: JSON.stringify({mode:"saveStandards", pin: ADMIN_PIN, items: stdItems})
+    });
+    // no-cors のため結果は読めない → 読み直して反映を確認する
+    await loadStandards();
+    toast("標準値を保存しました（一覧に反映されているか確認してください）");
+  }catch(err){
+    toast("保存に失敗しました。通信環境を確認してください");
+  }finally{
+    btn.disabled = false; btn.textContent = "標準値を保存";
+  }
+});
+
+/* --- 対象外の外注入力 --- */
+document.getElementById("admSend").addEventListener("click", async ()=>{
+  const date   = document.getElementById("admDate").value;
+  const name   = document.getElementById("admName").value.trim();
+  const client = document.getElementById("admClient").value.trim();
+  const site   = document.getElementById("admSite").value.trim();
+  const work   = document.getElementById("admWork").value.trim();
+  const ninku  = parseFloat(document.getElementById("admNinku").value)||0;
+  const ot     = parseFloat(document.getElementById("admOt").value)||0;
+  const comment= document.getElementById("admComment").value.trim();
+
+  const miss = [];
+  if(!date) miss.push("作業日");
+  if(!name) miss.push("外注職人名");
+  if(!site) miss.push("現場名");
+  if(!(ninku>0)) miss.push("人工数");
+  if(miss.length){ toast("未入力：" + miss.join("・")); return; }
+
+  const d = new Date(date + "T00:00:00");
+  const week = isNaN(d) ? "" : WEEK_JP[d.getDay()];
+
+  const btn = document.getElementById("admSend");
+  btn.disabled = true; btn.textContent = "送信中…";
+  try{
+    await fetch(GAS_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {"Content-Type": "text/plain;charset=utf-8"},
+      body: JSON.stringify({
+        mode: "adminReport",
+        pin: ADMIN_PIN,
+        operator: store.operator || "",
+        date: date,
+        week: week,
+        rows: [{
+          kindLabel: "外注", name: name, client: client, site: site,
+          w1: work, w2: "", w3: "",
+          ninku: ninku, ot: ot, garage: 0, toll: 0, comment: comment
+        }]
+      })
+    });
+    toast("対象外の外注を送信しました");
+    ["admName","admClient","admSite","admWork","admNinku","admOt","admComment"].forEach(id=>{
+      document.getElementById(id).value = "";
+    });
+  }catch(err){
+    toast("送信に失敗しました。通信環境を確認してください");
+  }finally{
+    btn.disabled = false; btn.textContent = "対象外として送信";
+  }
+});
 
 /* ============================================================
    設定モーダル：社員リスト & 履歴編集
