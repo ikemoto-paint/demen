@@ -1122,10 +1122,13 @@ function renderProgress(items){
     body.innerHTML = `<div class="empty">データがありません。管理画面で標準値を設定するか、日報を送信してください。</div>`;
     return;
   }
-  // 標準値あり（比率の高い順）→ 標準値なし の順に表示
+  // 標準値ありの現場のみ表示（比率の高い順）。標準値未設定の現場は表示しない
   const withStd = items.filter(it=>Number(it.std)>0)
     .sort((a,b)=> (b.ninku/b.std) - (a.ninku/a.std));
-  const noStd = items.filter(it=>!(Number(it.std)>0) && Number(it.ninku)>0);
+  if(withStd.length === 0){
+    body.innerHTML = `<div class="empty">標準値が設定されている現場がありません。管理画面で標準値を設定してください。</div>`;
+    return;
+  }
 
   const bar = it=>{
     const pct = it.std>0 ? it.ninku/it.std*100 : 0;
@@ -1152,12 +1155,7 @@ function renderProgress(items){
 
   body.innerHTML =
     `<div class="prog-legend">縦線が標準値（100%）です。80%以上でオレンジ、100%超えで赤になります。集計対象外の外注は含みません。</div>`
-    + withStd.map(bar).join("")
-    + (noStd.length ? noStd.map(it=>`
-      <div class="prog-item">
-        <div class="prog-head"><span class="prog-site">${esc(it.site)}</span></div>
-        <div class="prog-nostd">標準値が未設定です（実績 ${it.ninku} 人工）。管理画面で標準値を設定すると比率が表示されます。</div>
-      </div>`).join("") : "");
+    + withStd.map(bar).join("");
 }
 
 /* ============================================================
