@@ -1132,6 +1132,10 @@ function renderProgress(items){
     const cls = pct>100 ? "over" : (pct>=80 ? "warn" : "");
     const w = Math.min(pct, 120)/120*100;        // バーは120%を上限に描画
     const goal = 100/120*100;                    // 100%基準線の位置
+    const diff = Math.round((it.std - it.ninku)*10)/10;   // 標準値 − 実績（小数1位）
+    const diffHtml = diff >= 0
+      ? `<span>残り ${diff} 人工</span>`
+      : `<span style="color:var(--danger,#d32f2f);font-weight:600">超過 ${Math.abs(diff)} 人工</span>`;
     return `
     <div class="prog-item">
       <div class="prog-head">
@@ -1142,7 +1146,7 @@ function renderProgress(items){
         <div class="prog-bar ${cls}" style="width:${w}%"></div>
         <div class="prog-goal" style="left:${goal}%"></div>
       </div>
-      <div class="prog-nums"><span>実績 ${it.ninku} 人工</span><span>標準 ${it.std} 人工</span></div>
+      <div class="prog-nums"><span>実績 ${it.ninku} 人工</span><span>標準 ${it.std} 人工</span>${diffHtml}</div>
     </div>`;
   };
 
