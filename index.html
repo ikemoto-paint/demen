@@ -452,15 +452,15 @@
       <div class="row"><label>作業日</label><input type="date" id="admDate"></div>
       <div class="row"><label>外注職人名</label><input type="text" id="admName" placeholder="例）山田 太郎"></div>
       <div class="row grid2">
-        <div><label>取引先名</label><input type="text" id="admClient"></div>
-        <div><label>現場名</label><input type="text" id="admSite"></div>
+        <div><label>取引先名</label><div id="admClientHost"></div></div>
+        <div><label>現場名</label><div id="admSiteHost"></div></div>
       </div>
       <div class="row"><label>作業内容</label><input type="text" id="admWork" placeholder="任意"></div>
       <div class="row grid2">
         <div><label>人工数（時間）</label><select id="admNinku" class="ninku-sel"></select></div>
         <div><label>残業時間</label><input type="number" inputmode="decimal" step="0.5" min="0" id="admOt" placeholder="0"></div>
       </div>
-      <div class="row"><label>コメント</label><input type="text" id="admComment" placeholder="任意"></div>
+      <div class="row"><label>コメント</label><input type="text" id="admComment" placeholder="任意"><div style="font-size:11px;color:var(--sub);margin-top:4px">※人工数を「—」（0）にすると自動で「作業休止」と入ります</div></div>
       <button class="adm-send" id="admSend">対象外として送信</button>
     </div>
   </div>
@@ -1177,8 +1177,20 @@ document.getElementById("pinOk").addEventListener("click", ()=>{
   const d = document.getElementById("admDate");
   if(!d.value) d.value = new Date().toISOString().slice(0,10);
   fillAdmNinku();
+  mountAdmAutocomplete();
   loadStandards();
 });
+
+// 管理画面の取引先名・現場名の値を保持するオブジェクト（候補入力の格納先）
+const admRow = {client:"", site:""};
+
+// 取引先名・現場名に、社員側と同じ履歴からの候補入力を差し込む
+function mountAdmAutocomplete(){
+  const ch = document.getElementById("admClientHost");
+  const sh = document.getElementById("admSiteHost");
+  if(ch) mountAutocomplete(ch, "client", admRow, "client", "", false);
+  if(sh) mountAutocomplete(sh, "site",   admRow, "site",   "", false);
+}
 
 // 外注入力の人工数プルダウン（社員と同じ 0.5〜35.0h・0.5刻み）
 function fillAdmNinku(){
@@ -1192,6 +1204,17 @@ function fillAdmNinku(){
     opts += `<option value="${v}" ${s}>${v} h</option>`;
   }
   sel.innerHTML = opts;
+  // 人工数0のとき、コメントが空なら自動で「作業休止」。0以外に戻したら自動分を消す
+  sel.onchange = ()=>{
+    const cm = document.getElementById("admComment");
+    if(!cm) return;
+    const v = parseFloat(sel.value)||0;
+    if(v===0){
+      if(!cm.value.trim()) cm.value = "作業休止";
+    }else{
+      if(cm.value.trim()==="作業休止") cm.value = "";
+    }
+  };
 }
 
 /* --- 標準値の編集 --- */
@@ -1267,8 +1290,8 @@ document.getElementById("saveStd").addEventListener("click", async ()=>{
 document.getElementById("admSend").addEventListener("click", async ()=>{
   const date   = document.getElementById("admDate").value;
   const name   = document.getElementById("admName").value.trim();
-  const client = document.getElementById("admClient").value.trim();
-  const site   = document.getElementById("admSite").value.trim();
+  const client = (admRow.client||"").trim();
+  const site   = (admRow.site||"").trim();
   const work   = document.getElementById("admWork").value.trim();
   const ninku  = parseFloat(document.getElementById("admNinku").value)||0;
   const ot     = parseFloat(document.getElementById("admOt").value)||0;
@@ -1307,11 +1330,18 @@ document.getElementById("admSend").addEventListener("click", async ()=>{
       })
     });
     toast("対象外の外注を送信しました");
-    ["admName","admClient","admSite","admWork","admOt","admComment"].forEach(id=>{
+    // 取引先名・現場名を履歴へ追加（次回から候補に出る）
+    pushHistory("client", client);
+    pushHistory("site", site);
+    saveStore();
+    ["admName","admWork","admOt","admComment"].forEach(id=>{
       document.getElementById(id).value = "";
     });
     document.getElementById("admNinku").value = "0";
     fillAdmNinku();
+    // 取引先名・現場名の候補入力欄をリセット
+    admRow.client = ""; admRow.site = "";
+    mountAdmAutocomplete();
   }catch(err){
     toast("送信に失敗しました。通信環境を確認してください");
   }finally{
