@@ -457,7 +457,7 @@
       </div>
       <div class="row"><label>作業内容</label><input type="text" id="admWork" placeholder="任意"></div>
       <div class="row grid2">
-        <div><label>人工数（時間）</label><input type="number" inputmode="decimal" step="0.5" min="0" id="admNinku" placeholder="7"></div>
+        <div><label>人工数（時間）</label><select id="admNinku" class="ninku-sel"></select></div>
         <div><label>残業時間</label><input type="number" inputmode="decimal" step="0.5" min="0" id="admOt" placeholder="0"></div>
       </div>
       <div class="row"><label>コメント</label><input type="text" id="admComment" placeholder="任意"></div>
@@ -1176,8 +1176,23 @@ document.getElementById("pinOk").addEventListener("click", ()=>{
   openModal("adminModal");
   const d = document.getElementById("admDate");
   if(!d.value) d.value = new Date().toISOString().slice(0,10);
+  fillAdmNinku();
   loadStandards();
 });
+
+// 外注入力の人工数プルダウン（社員と同じ 0.5〜35.0h・0.5刻み）
+function fillAdmNinku(){
+  const sel = document.getElementById("admNinku");
+  if(!sel) return;
+  const cur = parseFloat(sel.value)||0;
+  let opts = '<option value="0">—</option>';
+  for(let v=0.5; v<=35.0+1e-9; v+=0.5){
+    v = Math.round(v*2)/2;
+    const s = Math.abs(cur-v)<1e-9 ? "selected":"";
+    opts += `<option value="${v}" ${s}>${v} h</option>`;
+  }
+  sel.innerHTML = opts;
+}
 
 /* --- 標準値の編集 --- */
 let stdItems = [];   // [{site, std}]
@@ -1257,14 +1272,16 @@ document.getElementById("admSend").addEventListener("click", async ()=>{
   const work   = document.getElementById("admWork").value.trim();
   const ninku  = parseFloat(document.getElementById("admNinku").value)||0;
   const ot     = parseFloat(document.getElementById("admOt").value)||0;
-  const comment= document.getElementById("admComment").value.trim();
+  let comment  = document.getElementById("admComment").value.trim();
 
   const miss = [];
   if(!date) miss.push("作業日");
   if(!name) miss.push("外注職人名");
   if(!site) miss.push("現場名");
-  if(!(ninku>0)) miss.push("人工数");
   if(miss.length){ toast("未入力：" + miss.join("・")); return; }
+
+  // 管理画面のみ：人工数0の場合は「作業休止」として扱い、コメントを自動入力
+  if(!(ninku>0) && !comment) comment = "作業休止";
 
   const d = new Date(date + "T00:00:00");
   const week = isNaN(d) ? "" : WEEK_JP[d.getDay()];
@@ -1290,9 +1307,11 @@ document.getElementById("admSend").addEventListener("click", async ()=>{
       })
     });
     toast("対象外の外注を送信しました");
-    ["admName","admClient","admSite","admWork","admNinku","admOt","admComment"].forEach(id=>{
+    ["admName","admClient","admSite","admWork","admOt","admComment"].forEach(id=>{
       document.getElementById(id).value = "";
     });
+    document.getElementById("admNinku").value = "0";
+    fillAdmNinku();
   }catch(err){
     toast("送信に失敗しました。通信環境を確認してください");
   }finally{
