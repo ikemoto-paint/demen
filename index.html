@@ -105,6 +105,14 @@
   .carry-sep{color:var(--sub)}
   .carry-site{color:var(--ink)}
   .carry-tag{margin-left:auto;font-size:10px;font-weight:700;color:#fff;background:var(--navy);padding:2px 8px;border-radius:20px;letter-spacing:.04em}
+  /* 工事区分（本工事／追加工事）セグメント */
+  .seg .seg-extra.active{background:var(--accent);border-color:var(--accent)}
+  /* 追加工事カードの視覚的強調 */
+  .card.is-extra{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft) inset}
+  .extra-badge{display:inline-block;font-size:10px;font-weight:700;color:#fff;background:var(--accent);padding:2px 8px;border-radius:20px;letter-spacing:.04em;margin-left:6px}
+  .hist-card-top .h-extra{font-size:11px;font-weight:700;color:#fff;background:var(--accent);padding:1px 7px;border-radius:20px}
+  .prog-extra{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:var(--sub)}
+  .prog-extra .extra-badge{margin-left:0}
 
   /* autocomplete */
   .ac{position:relative}
@@ -548,9 +556,10 @@ const HISTORY_LABELS = {
 };
 
 function newRow(copyFrom){
-  const base = {id:rid++, kind:"staff", name:"", client:"", site:"", w1:"", w2:"", w3:"", comment:"", ninku:0, ot:0, garage:0, toll:0};
+  const base = {id:rid++, kind:"staff", extra:false, name:"", client:"", site:"", w1:"", w2:"", w3:"", comment:"", ninku:0, ot:0, garage:0, toll:0};
   if(copyFrom){ // 労働時間・コメント・経費以外（区分・職人名・取引先・現場・作業内容3階層）を引き継ぐ
     base.kind = copyFrom.kind;
+    // 工事区分（extra）は引き継がず、常に「本工事」を初期選択とする
     base.name = copyFrom.name;
     base.client = copyFrom.client;
     base.site = copyFrom.site;
@@ -594,9 +603,9 @@ function renderRows(){
   rowsEl.innerHTML = "";
   rows.forEach((r, idx)=>{
     const card = document.createElement("div");
-    card.className = "card";
+    card.className = "card" + (r.extra ? " is-extra" : "");
     card.innerHTML = `
-      <div class="idx"><span class="idx-label">タスクカード No.</span><span class="idx-num">${idx+1}</span></div>
+      <div class="idx"><span class="idx-label">タスクカード No.</span><span class="idx-num">${idx+1}</span>${r.extra?`<span class="extra-badge">追加工事</span>`:""}</div>
       ${rows.length>1?`<button class="del" data-del="${r.id}">削除</button>`:""}
       ${r.workOnly ? `
       <div class="carry">
@@ -611,7 +620,15 @@ function renderRows(){
           <button data-kind="staff" class="${r.kind==='staff'?'active':''}">社員</button>
           <button data-kind="casual" class="seg-casual ${r.kind==='casual'?'active':''}">外注</button>
         </div>
+      </div>`}
+      <div class="row">
+        <label>工事区分</label>
+        <div class="seg" data-segextra="${r.id}">
+          <button data-extra="0" class="${r.extra?'':'active'}">本工事</button>
+          <button data-extra="1" class="seg-extra ${r.extra?'active':''}">追加工事</button>
+        </div>
       </div>
+      ${r.workOnly ? "" : `
       <div class="row">
         <label>職人名</label>
         <div data-name="${r.id}"></div>
@@ -703,6 +720,16 @@ function renderRows(){
       segEl.addEventListener("click", e=>{
         const b = e.target.closest("[data-kind]"); if(!b) return;
         r.kind = b.getAttribute("data-kind"); r.name="";
+        renderRows();
+      });
+    }
+
+    // 工事区分（本工事／追加工事）トグル
+    const segExtraEl = card.querySelector(`[data-segextra="${r.id}"]`);
+    if(segExtraEl){
+      segExtraEl.addEventListener("click", e=>{
+        const b = e.target.closest("[data-extra]"); if(!b) return;
+        r.extra = b.getAttribute("data-extra") === "1";
         renderRows();
       });
     }
@@ -959,6 +986,8 @@ async function doSend(){
     week: week,
     rows: rows.map(r=>({
       kindLabel: r.kind === "casual" ? "外注" : "社員",
+      extra:      !!r.extra,
+      extraLabel: r.extra ? "追加工事" : "本工事",
       name:    r.name || "",
       client:  r.client || "",
       site:    r.site || "",
@@ -1083,6 +1112,7 @@ function renderHistory(items){
                 <div class="hist-card-top">
                   <span class="hist-card-date">${esc(it.date)}${it.week?`（${esc(it.week)}）`:""}</span>
                   <span class="h-tag">${esc(it.kind)}</span>
+                  ${(it.extra===true||it.extra==="true"||it.extraLabel==="追加工事")?`<span class="h-extra">追加工事</span>`:""}
                   <span class="h-val">${toNin(it.ninku)}人${Number(it.ot)>0?` ／ 残業${esc(String(it.ot))}h`:""}</span>
                 </div>
                 ${(Number(it.garage)>0||Number(it.toll)>0)?`<div class="hist-card-comment">経費：${Number(it.garage)>0?`ガレージ代 ${Number(it.garage).toLocaleString()}円`:""}${Number(it.garage)>0&&Number(it.toll)>0?" ／ ":""}${Number(it.toll)>0?`有料道路 ${Number(it.toll).toLocaleString()}円`:""}</div>`:""}
@@ -1139,6 +1169,10 @@ function renderProgress(items){
     const diffHtml = diff >= 0
       ? `<span>残り ${diff} 人工</span>`
       : `<span style="color:var(--danger,#d32f2f);font-weight:600">超過 ${Math.abs(diff)} 人工</span>`;
+    const extra = Math.round((Number(it.extraNinku)||0)*10)/10;   // 追加工事分（参考）
+    const extraHtml = extra > 0
+      ? `<div class="prog-extra"><span class="extra-badge">追加工事</span><span>＋${extra} 人工（標準値の対象外・参考）</span></div>`
+      : "";
     return `
     <div class="prog-item">
       <div class="prog-head">
@@ -1149,12 +1183,13 @@ function renderProgress(items){
         <div class="prog-bar ${cls}" style="width:${w}%"></div>
         <div class="prog-goal" style="left:${goal}%"></div>
       </div>
-      <div class="prog-nums"><span>実績 ${it.ninku} 人工</span><span>標準 ${it.std} 人工</span>${diffHtml}</div>
+      <div class="prog-nums"><span>本工事 ${it.ninku} 人工</span><span>標準 ${it.std} 人工</span>${diffHtml}</div>
+      ${extraHtml}
     </div>`;
   };
 
   body.innerHTML =
-    `<div class="prog-legend">縦線が標準値（100%）です。80%以上でオレンジ、100%超えで赤になります。集計対象外の外注は含みません。</div>`
+    `<div class="prog-legend">縦線が標準値（100%）です。80%以上でオレンジ、100%超えで赤になります。進捗率は<b>本工事のみ</b>で計算し、追加工事は参考として別枠に表示します。集計対象外の外注は含みません。</div>`
     + withStd.map(bar).join("");
 }
 
