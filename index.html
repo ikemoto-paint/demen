@@ -241,6 +241,13 @@
   .hist-card-work{font-size:13px;color:var(--sub);margin-top:3px;line-height:1.7}
   .hist-card-comment{font-size:13px;color:var(--sub);margin-top:3px}
   .hist-card-sent{font-size:11px;color:var(--sub);margin-top:6px;text-align:right}
+  .hist-card-photo{margin-top:8px}
+  .photo-view-btn{
+    display:inline-block;font-size:13px;font-weight:700;color:var(--accent-deep);
+    background:var(--accent-soft);border:1px solid var(--accent);border-radius:8px;
+    padding:6px 12px;text-decoration:none;
+  }
+  .photo-view-btn:active{background:#ffe4d2}
   .hist-note{font-size:12px;color:var(--sub);margin-bottom:10px}
 
   /* modal */
@@ -1308,6 +1315,7 @@ function renderHistory(items){
                 </div>
                 ${(Number(it.garage)>0||Number(it.toll)>0)?`<div class="hist-card-comment">経費：${Number(it.garage)>0?`ガレージ代 ${Number(it.garage).toLocaleString()}円`:""}${Number(it.garage)>0&&Number(it.toll)>0?" ／ ":""}${Number(it.toll)>0?`有料道路 ${Number(it.toll).toLocaleString()}円`:""}</div>`:""}
                 ${it.comment?`<div class="hist-card-comment">コメント：${esc(it.comment)}</div>`:""}
+                ${it.photoUrl?`<div class="hist-card-photo"><a href="${esc(it.photoUrl)}" target="_blank" rel="noopener" class="photo-view-btn">📷 写真を見る</a></div>`:""}
                 <div class="hist-card-sent">送信：${esc(it.sent)}</div>
               </div>`).join("")}
           </div>`).join("")}
