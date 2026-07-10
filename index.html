@@ -329,6 +329,32 @@
     padding:12px 18px;border-radius:24px;font-size:14px;z-index:80;opacity:0;transition:opacity .25s;pointer-events:none;
   }
   .toast.show{opacity:1}
+
+  /* ★写真の添付エリア */
+  .photo-box{
+    background:var(--white);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px;margin-top:12px;
+  }
+  .photo-head{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:10px}
+  .photo-site-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .photo-site-row label{font-size:12px;color:var(--sub);flex:0 0 auto;margin:0}
+  .photo-site-row select{
+    flex:1;font-family:inherit;font-size:16px;color:var(--ink);
+    border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:#fff;
+  }
+  .photo-add-btn{
+    width:100%;border:1.5px dashed var(--accent);background:var(--accent-soft);color:var(--accent-deep);
+    border-radius:10px;padding:12px 0;font-size:15px;font-family:inherit;font-weight:700;cursor:pointer;
+  }
+  .photo-add-btn:active{background:#ffe4d2}
+  .photo-thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .photo-thumb{position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:#f0f0f0}
+  .photo-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .photo-thumb .rm{
+    position:absolute;top:2px;right:2px;width:22px;height:22px;border:0;border-radius:50%;
+    background:rgba(0,0,0,.6);color:#fff;font-size:15px;line-height:22px;text-align:center;cursor:pointer;padding:0;
+  }
+  .photo-note{font-size:12px;color:var(--sub);margin-top:10px;line-height:1.5}
 </style>
 </head>
 <body>
@@ -361,6 +387,19 @@
   <div class="summary" id="summary" style="display:none">
     <h3>本日の人工数チェック（7時間＝1人工／合計は7の倍数）</h3>
     <div id="sumBody"></div>
+  </div>
+
+  <!-- ★写真の添付エリア -->
+  <div class="photo-box" id="photoBox">
+    <div class="photo-head">現場写真の添付（任意）</div>
+    <div class="photo-site-row">
+      <label for="photoSite">保存先の現場</label>
+      <select id="photoSite"></select>
+    </div>
+    <button type="button" class="photo-add-btn" id="photoAddBtn">＋ 写真を追加（撮影・アルバム）</button>
+    <input type="file" id="photoInput" accept="image/*" multiple style="display:none">
+    <div class="photo-thumbs" id="photoThumbs"></div>
+    <div class="photo-note" id="photoNote">※ 送信すると、選んだ現場のフォルダに写真が保存されます。</div>
   </div>
 </div>
 
@@ -778,6 +817,7 @@ function renderRows(){
     if(delBtn) delBtn.addEventListener("click", ()=> delRow(r.id));
   });
   updateSummary();
+  refreshPhotoSites();   // ★写真の保存先プルダウンを現場名に合わせて更新
 }
 
 function placeholderFor(cat){
@@ -832,7 +872,7 @@ function mountAutocomplete(host, cat, rowObj, field, placeholder, multiline){
   }
 
   input.addEventListener("focus", ()=> open(input.value));
-  input.addEventListener("input", ()=>{ rowObj[field]=input.value; autoGrow(); open(input.value); });
+  input.addEventListener("input", ()=>{ rowObj[field]=input.value; autoGrow(); open(input.value); if(cat==="site") refreshPhotoSites(); });
   input.addEventListener("blur", ()=> setTimeout(()=>list.classList.remove("open"), 180));
 
   list.addEventListener("mousedown", e=>{
@@ -849,7 +889,7 @@ function mountAutocomplete(host, cat, rowObj, field, placeholder, multiline){
     if(it){
       e.preventDefault();
       const v = it.getAttribute("data-v");
-      input.value=v; rowObj[field]=v; list.classList.remove("open"); autoGrow(); updateSummary();
+      input.value=v; rowObj[field]=v; list.classList.remove("open"); autoGrow(); updateSummary(); if(cat==="site") refreshPhotoSites();
     }
   });
 }
@@ -962,6 +1002,140 @@ const HOURS_PER_NINKU = 7;  // 7時間 ＝ 1人工
 
 const WEEK_JP = ["日","月","火","水","木","金","土"];
 
+/* ============================================================
+   ★写真の添付（撮影・アルバム選択／圧縮／サムネイル／送信）
+   ============================================================ */
+let photoList = [];   // {id, dataUrl(表示用), base64(送信用・ヘッダ無し), mime, name}
+const PHOTO_MAX_EDGE = 1600;   // 長辺の最大px（これより大きい写真は縮小）
+const PHOTO_QUALITY  = 0.7;    // JPEG圧縮率
+
+// 入力中カードの現場名からプルダウンを作り直す
+function refreshPhotoSites(){
+  const sel = document.getElementById("photoSite");
+  if(!sel) return;
+  const prev = sel.value;
+  // 重複を除いた現場名リスト
+  const sites = [];
+  rows.forEach(r=>{
+    const s = (r.site||"").trim();
+    if(s && sites.indexOf(s) === -1) sites.push(s);
+  });
+  if(sites.length === 0){
+    sel.innerHTML = `<option value="">（現場名を入力してください）</option>`;
+    sel.value = "";
+    return;
+  }
+  sel.innerHTML = sites.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
+  // 以前の選択を維持。無ければ先頭（1つだけなら自動的に先頭）
+  if(prev && sites.indexOf(prev) !== -1) sel.value = prev;
+  else sel.value = sites[0];
+}
+
+// 写真を1枚、canvasで縮小＆JPEG化して返す（Promise<{dataUrl, base64, mime}>）
+function compressImage(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      const img = new Image();
+      img.onload = ()=>{
+        let w = img.width, h = img.height;
+        const long = Math.max(w, h);
+        if(long > PHOTO_MAX_EDGE){
+          const scale = PHOTO_MAX_EDGE / long;
+          w = Math.round(w * scale);
+          h = Math.round(h * scale);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL("image/jpeg", PHOTO_QUALITY);
+        const base64 = dataUrl.split(",")[1] || "";
+        resolve({dataUrl:dataUrl, base64:base64, mime:"image/jpeg"});
+      };
+      img.onerror = ()=> reject(new Error("画像の読み込みに失敗しました"));
+      img.src = reader.result;
+    };
+    reader.onerror = ()=> reject(new Error("ファイルの読み込みに失敗しました"));
+    reader.readAsDataURL(file);
+  });
+}
+
+// サムネイルを描画
+function renderPhotoThumbs(){
+  const box = document.getElementById("photoThumbs");
+  if(!box) return;
+  box.innerHTML = photoList.map(p=>`
+    <div class="photo-thumb" data-id="${p.id}">
+      <img src="${p.dataUrl}" alt="">
+      <button type="button" class="rm" data-id="${p.id}">×</button>
+    </div>`).join("");
+  box.querySelectorAll(".rm").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const id = btn.getAttribute("data-id");
+      photoList = photoList.filter(p=> String(p.id) !== String(id));
+      renderPhotoThumbs();
+    });
+  });
+}
+
+// 「写真を追加」ボタン → ファイル選択を開く
+document.getElementById("photoAddBtn").addEventListener("click", ()=>{
+  document.getElementById("photoInput").click();
+});
+
+// ファイルが選ばれたら圧縮してリストに追加
+document.getElementById("photoInput").addEventListener("change", async (ev)=>{
+  const files = Array.from(ev.target.files || []);
+  if(files.length === 0) return;
+  const btn = document.getElementById("photoAddBtn");
+  const org = btn.textContent;
+  btn.disabled = true; btn.textContent = "写真を処理中…";
+  for(const file of files){
+    try{
+      const c = await compressImage(file);
+      photoList.push({
+        id: Date.now() + "_" + Math.random().toString(36).slice(2,7),
+        dataUrl: c.dataUrl,
+        base64:  c.base64,
+        mime:    c.mime,
+        name:    file.name || "photo"
+      });
+    }catch(err){
+      toast("一部の写真を読み込めませんでした");
+    }
+  }
+  btn.disabled = false; btn.textContent = org;
+  ev.target.value = "";   // 同じ写真を続けて選べるようにクリア
+  renderPhotoThumbs();
+});
+
+// 写真をGASへ別送する（日報本体の送信後に呼ぶ）
+async function sendPhotos(site, date, operator){
+  if(photoList.length === 0) return;
+  if(!site){ toast("写真の保存先の現場が未選択のため、写真は送信されませんでした"); return; }
+  const payload = {
+    mode: "savePhotos",
+    site: site,
+    date: date,
+    operator: operator,
+    photos: photoList.map(p=>({ name:p.name, data:p.base64, mime:p.mime }))
+  };
+  try{
+    await fetch(GAS_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {"Content-Type": "text/plain;charset=utf-8"},
+      body: JSON.stringify(payload)
+    });
+    // no-cors のため結果は読めない。写真リストはクリアする
+    photoList = [];
+    renderPhotoThumbs();
+  }catch(err){
+    toast("写真の送信に失敗しました。通信環境を確認してください");
+  }
+}
+
 async function doSend(){
   // 履歴に蓄積
   rows.forEach(r=>{
@@ -1016,6 +1190,12 @@ async function doSend(){
   btn.disabled = true;
   btn.textContent = "送信中…";
 
+  // 写真の保存先情報を、リセット前に取っておく
+  const photoSiteSel = document.getElementById("photoSite");
+  const photoSite = photoSiteSel ? (photoSiteSel.value||"").trim() : "";
+  const photoOperator = store.operator || "";
+  const hasPhotos = photoList.length > 0;
+
   try{
     await fetch(GAS_URL, {
       method: "POST",
@@ -1024,9 +1204,18 @@ async function doSend(){
       body: JSON.stringify(payload)
     });
     // no-cors ではレスポンス内容を読めないため、成功扱いとする
-    toast("送信しました");
+
+    // 写真があれば、日報本体の後に別送する
+    if(hasPhotos){
+      btn.textContent = "写真を送信中…";
+      await sendPhotos(photoSite, date, photoOperator);
+      toast("送信しました（写真も保存しました）");
+    }else{
+      toast("送信しました");
+    }
     rows = [newRow()];
     renderRows();
+    refreshPhotoSites();
   }catch(err){
     toast("送信に失敗しました。通信環境を確認して再送してください");
   }finally{
