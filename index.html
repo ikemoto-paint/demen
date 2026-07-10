@@ -1208,6 +1208,8 @@ async function doSend(){
     // 写真があれば、日報本体の後に別送する
     if(hasPhotos){
       btn.textContent = "写真を送信中…";
+      // 日報本体の書き込みが先に確定するよう少し待つ（URL照合の取りこぼし防止）
+      await new Promise(r=> setTimeout(r, 1500));
       await sendPhotos(photoSite, date, photoOperator);
       toast("送信しました（写真も保存しました）");
     }else{
