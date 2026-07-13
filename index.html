@@ -504,7 +504,7 @@
       <h3>集計対象外の外注入力</h3>
       <div style="font-size:12px;color:var(--sub);margin-bottom:8px">ここから送信した外注の人工数は、進捗グラフの合計に<b>含まれません</b>。</div>
       <div class="row"><label>作業日</label><input type="date" id="admDate"></div>
-      <div class="row"><label>外注職人名</label><input type="text" id="admName" placeholder="例）山田 太郎"></div>
+      <div class="row"><label>外注職人名</label><div id="admNameHost"></div></div>
       <div class="row grid2">
         <div><label>取引先名</label><div id="admClientHost"></div></div>
         <div><label>現場名</label><div id="admSiteHost"></div></div>
@@ -515,6 +515,16 @@
         <div><label>残業時間</label><input type="number" inputmode="decimal" step="0.5" min="0" id="admOt" placeholder="0"></div>
       </div>
       <div class="row"><label>コメント</label><input type="text" id="admComment" placeholder="任意"><div style="font-size:11px;color:var(--sub);margin-top:4px">※人工数を「—」（0）にすると自動で「作業休止」と入ります</div></div>
+
+      <!-- ★管理画面の写真添付 -->
+      <div class="row">
+        <label>現場写真の添付（任意）</label>
+        <button type="button" class="photo-add-btn" id="admPhotoAddBtn">＋ 写真を追加（撮影・アルバム）</button>
+        <input type="file" id="admPhotoInput" accept="image/*" multiple style="display:none">
+        <div class="photo-thumbs" id="admPhotoThumbs"></div>
+        <div style="font-size:11px;color:var(--sub);margin-top:6px">※写真は「外注職人名」のフォルダに保存されます。</div>
+      </div>
+
       <button class="adm-send" id="admSend">対象外として送信</button>
     </div>
   </div>
@@ -1415,13 +1425,15 @@ document.getElementById("pinOk").addEventListener("click", ()=>{
   loadStandards();
 });
 
-// 管理画面の取引先名・現場名の値を保持するオブジェクト（候補入力の格納先）
-const admRow = {client:"", site:""};
+// 管理画面の外注職人名・取引先名・現場名の値を保持するオブジェクト（候補入力の格納先）
+const admRow = {name:"", client:"", site:""};
 
-// 取引先名・現場名に、社員側と同じ履歴からの候補入力を差し込む
+// 外注職人名・取引先名・現場名に、社員側と同じ履歴からの候補入力を差し込む
 function mountAdmAutocomplete(){
+  const nh = document.getElementById("admNameHost");
   const ch = document.getElementById("admClientHost");
   const sh = document.getElementById("admSiteHost");
+  if(nh) mountAutocomplete(nh, "casual", admRow, "name",   "例）山田 太郎", false);
   if(ch) mountAutocomplete(ch, "client", admRow, "client", "", false);
   if(sh) mountAutocomplete(sh, "site",   admRow, "site",   "", false);
 }
@@ -1520,10 +1532,85 @@ document.getElementById("saveStd").addEventListener("click", async ()=>{
   }
 });
 
+/* --- ★管理画面の写真添付 --- */
+let admPhotoList = [];   // 管理画面用の写真リスト（通常画面とは別管理）
+
+function renderAdmPhotoThumbs(){
+  const box = document.getElementById("admPhotoThumbs");
+  if(!box) return;
+  box.innerHTML = admPhotoList.map(p=>`
+    <div class="photo-thumb" data-id="${p.id}">
+      <img src="${p.dataUrl}" alt="">
+      <button type="button" class="rm" data-id="${p.id}">×</button>
+    </div>`).join("");
+  box.querySelectorAll(".rm").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const id = btn.getAttribute("data-id");
+      admPhotoList = admPhotoList.filter(p=> String(p.id) !== String(id));
+      renderAdmPhotoThumbs();
+    });
+  });
+}
+
+// 「写真を追加」→ ファイル選択を開く
+document.getElementById("admPhotoAddBtn").addEventListener("click", ()=>{
+  document.getElementById("admPhotoInput").click();
+});
+
+// 選ばれた写真を圧縮してリストに追加
+document.getElementById("admPhotoInput").addEventListener("change", async (ev)=>{
+  const files = Array.from(ev.target.files || []);
+  if(files.length === 0) return;
+  const btn = document.getElementById("admPhotoAddBtn");
+  const org = btn.textContent;
+  btn.disabled = true; btn.textContent = "写真を処理中…";
+  for(const file of files){
+    try{
+      const c = await compressImage(file);   // 通常画面と同じ圧縮処理を再利用
+      admPhotoList.push({
+        id: Date.now() + "_" + Math.random().toString(36).slice(2,7),
+        dataUrl: c.dataUrl,
+        base64:  c.base64,
+        mime:    c.mime,
+        name:    file.name || "photo"
+      });
+    }catch(err){
+      toast("一部の写真を読み込めませんでした");
+    }
+  }
+  btn.disabled = false; btn.textContent = org;
+  ev.target.value = "";
+  renderAdmPhotoThumbs();
+});
+
+// 管理画面の写真をGASへ送る（外注職人名のフォルダに保存される）
+async function sendAdmPhotos(site, date, workerName){
+  if(admPhotoList.length === 0) return;
+  const payload = {
+    mode: "savePhotos",
+    site: site,
+    date: date,
+    operator: workerName,   // ★外注職人名をフォルダ名に使う（案1-B）
+    photos: admPhotoList.map(p=>({ name:p.name, data:p.base64, mime:p.mime }))
+  };
+  try{
+    await fetch(GAS_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {"Content-Type": "text/plain;charset=utf-8"},
+      body: JSON.stringify(payload)
+    });
+    admPhotoList = [];
+    renderAdmPhotoThumbs();
+  }catch(err){
+    toast("写真の送信に失敗しました。通信環境を確認してください");
+  }
+}
+
 /* --- 対象外の外注入力 --- */
 document.getElementById("admSend").addEventListener("click", async ()=>{
   const date   = document.getElementById("admDate").value;
-  const name   = document.getElementById("admName").value.trim();
+  const name   = (admRow.name||"").trim();
   const client = (admRow.client||"").trim();
   const site   = (admRow.site||"").trim();
   const work   = document.getElementById("admWork").value.trim();
@@ -1563,18 +1650,28 @@ document.getElementById("admSend").addEventListener("click", async ()=>{
         }]
       })
     });
-    toast("対象外の外注を送信しました");
-    // 取引先名・現場名を履歴へ追加（次回から候補に出る）
+    // 写真があれば、日報本体の後に別送する（外注職人名のフォルダへ）
+    if(admPhotoList.length > 0){
+      btn.textContent = "写真を送信中…";
+      // 日報本体の書き込みが先に確定するよう少し待つ（URL照合の取りこぼし防止）
+      await new Promise(r=> setTimeout(r, 1500));
+      await sendAdmPhotos(site, date, name);
+      toast("対象外の外注を送信しました（写真も保存しました）");
+    }else{
+      toast("対象外の外注を送信しました");
+    }
+    // 外注職人名・取引先名・現場名を履歴へ追加（次回から候補に出る）
+    pushHistory("casual", name);
     pushHistory("client", client);
     pushHistory("site", site);
     saveStore();
-    ["admName","admWork","admOt","admComment"].forEach(id=>{
+    ["admWork","admOt","admComment"].forEach(id=>{
       document.getElementById(id).value = "";
     });
     document.getElementById("admNinku").value = "0";
     fillAdmNinku();
-    // 取引先名・現場名の候補入力欄をリセット
-    admRow.client = ""; admRow.site = "";
+    // 外注職人名・取引先名・現場名の候補入力欄をリセット
+    admRow.name = ""; admRow.client = ""; admRow.site = "";
     mountAdmAutocomplete();
   }catch(err){
     toast("送信に失敗しました。通信環境を確認してください");
