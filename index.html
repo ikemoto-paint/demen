@@ -689,15 +689,13 @@ function renderRows(){
         <label>職人名</label>
         <div data-name="${r.id}"></div>
       </div>
-      <div class="row grid2">
-        <div>
-          <label>取引先名</label>
-          <div data-ac="client" data-rid="${r.id}"></div>
-        </div>
-        <div>
-          <label>現場名</label>
-          <div data-ac="site" data-rid="${r.id}"></div>
-        </div>
+      <div class="row">
+        <label>取引先名</label>
+        <div data-ac="client" data-rid="${r.id}"></div>
+      </div>
+      <div class="row">
+        <label>現場名</label>
+        <div data-ac="site" data-rid="${r.id}"></div>
       </div>
       `}
       <div class="row">
@@ -758,7 +756,7 @@ function renderRows(){
     card.querySelectorAll("[data-ac]").forEach(host=>{
       const cat = host.getAttribute("data-ac");
       const field = ({client:"client",site:"site",work1:"w1",work2:"w2",work3:"w3"})[cat];
-      const multiline = (cat==="work1"||cat==="work2"||cat==="work3");
+      const multiline = (cat==="work1"||cat==="work2"||cat==="work3"||cat==="client"||cat==="site");
       mountAutocomplete(host, cat, r, field, placeholderFor(cat), multiline);
     });
 
@@ -1434,8 +1432,8 @@ function mountAdmAutocomplete(){
   const ch = document.getElementById("admClientHost");
   const sh = document.getElementById("admSiteHost");
   if(nh) mountAutocomplete(nh, "casual", admRow, "name",   "例）山田 太郎", false);
-  if(ch) mountAutocomplete(ch, "client", admRow, "client", "", false);
-  if(sh) mountAutocomplete(sh, "site",   admRow, "site",   "", false);
+  if(ch) mountAutocomplete(ch, "client", admRow, "client", "", true);
+  if(sh) mountAutocomplete(sh, "site",   admRow, "site",   "", true);
 }
 
 // 外注入力の人工数プルダウン（社員と同じ 0.5〜35.0h・0.5刻み）
