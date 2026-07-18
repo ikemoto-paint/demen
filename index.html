@@ -1378,7 +1378,7 @@ function renderProgress(items){
       : `<span style="color:var(--danger,#d32f2f);font-weight:600">超過 ${Math.abs(diff)} 人工</span>`;
     const extra = Math.round((Number(it.extraNinku)||0)*10)/10;   // 追加工事分（参考）
     const extraHtml = extra > 0
-      ? `<div class="prog-extra"><span class="extra-badge">追加工事</span><span>＋${extra} 人工（標準値の対象外・参考）</span></div>`
+      ? `<div class="prog-extra"><span class="extra-badge">追加工事</span><span>＋${extra} 人工</span></div>`
       : "";
     return `
     <div class="prog-item">
